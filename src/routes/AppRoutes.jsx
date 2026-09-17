@@ -41,6 +41,7 @@ import AdminLogin from "../pages/admin/AdminLogin.jsx";
 import AdminDashboard from "../pages/admin/AdminDashboard.jsx";
 import AdminAnalytics from "../pages/admin/AdminAnalytics.jsx";
 import AdminProtectedRoute from "../pages/admin/AdminProtectedRoute.jsx";
+import AdminProducts from "../pages/admin/AdminProducts.jsx";
 
 function NotFound() {
   return (
@@ -154,6 +155,7 @@ export default function AppRoutes() {
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
 
         <Route path="/admin/analytics" element={<AdminAnalytics />} />
+        <Route path="/admin/products" element={<AdminProducts />} />
       </Route>
     </Routes>
   );

@@ -10,6 +10,11 @@ import {
   Trash2,
   UserRound,
   X,
+  Send,
+  Plus,
+  Minus,
+  Package,
+  FileText,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -29,11 +34,20 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   const [quotes, setQuotes] = useState([]);
+  const [products, setProducts] = useState([]);
+
   const [loading, setLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(false);
+
   const [selectedQuote, setSelectedQuote] = useState(null);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [error, setError] = useState("");
+
+  const [quoteProducts, setQuoteProducts] = useState([]);
+  const [customNote, setCustomNote] = useState("");
+  const [sendingQuote, setSendingQuote] = useState(false);
 
   const token = localStorage.getItem("adminToken");
 
@@ -52,6 +66,12 @@ export default function AdminDashboard() {
 
     navigate("/admin/login", { replace: true });
   }, [navigate]);
+
+  /*
+   * ============================================================
+   * FETCH ENQUIRIES
+   * ============================================================
+   */
 
   const fetchQuotes = useCallback(async () => {
     if (!token) {
@@ -84,13 +104,58 @@ export default function AdminDashboard() {
     }
   }, [api, logout, token]);
 
+  /*
+   * ============================================================
+   * FETCH PRODUCTS
+   * ============================================================
+   */
+
+  const fetchProducts = useCallback(async () => {
+    if (!token) {
+      logout();
+      return;
+    }
+
+    try {
+      setProductsLoading(true);
+
+      const response = await api.get("/products");
+
+      if (response.data.success) {
+        setProducts(response.data.products || []);
+      }
+    } catch (error) {
+      console.error("Get products error:", error);
+
+      if (error.response?.status === 401) {
+        logout();
+        return;
+      }
+
+      console.error(
+        error.response?.data?.message || "Unable to load products.",
+      );
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [api, logout, token]);
+
   useEffect(() => {
     fetchQuotes();
-  }, [fetchQuotes]);
+    fetchProducts();
+  }, [fetchQuotes, fetchProducts]);
+
+  /*
+   * ============================================================
+   * UPDATE STATUS
+   * ============================================================
+   */
 
   const updateStatus = async (id, status) => {
     try {
-      const response = await api.patch(`/quotes/${id}/status`, { status });
+      const response = await api.patch(`/quotes/${id}/status`, {
+        status,
+      });
 
       if (response.data.success) {
         setQuotes((prev) =>
@@ -110,6 +175,12 @@ export default function AdminDashboard() {
       alert(error.response?.data?.message || "Unable to update status.");
     }
   };
+
+  /*
+   * ============================================================
+   * DELETE ENQUIRY
+   * ============================================================
+   */
 
   const deleteQuote = async (id) => {
     const confirmed = window.confirm(
@@ -138,6 +209,185 @@ export default function AdminDashboard() {
     }
   };
 
+  /*
+   * ============================================================
+   * OPEN ENQUIRY
+   * ============================================================
+   */
+
+  const openQuote = (quote) => {
+    setSelectedQuote(quote);
+    setQuoteProducts([]);
+    setCustomNote("");
+  };
+
+  /*
+   * ============================================================
+   * ADD PRODUCT TO QUOTATION
+   * ============================================================
+   */
+
+  const addProduct = (product) => {
+    const alreadyAdded = quoteProducts.some(
+      (item) => item.productId === product._id,
+    );
+
+    if (alreadyAdded) {
+      alert("This product is already added.");
+      return;
+    }
+
+    setQuoteProducts((prev) => [
+      ...prev,
+      {
+        productId: product._id,
+        name: product.name,
+        category: product.category,
+        description: product.description || "",
+        features: product.features || [],
+        deliveryTime: product.deliveryTime || "",
+        currency: product.currency || "USD",
+        price: Number(product.price) || 0,
+        quantity: 1,
+      },
+    ]);
+  };
+
+  /*
+   * ============================================================
+   * REMOVE PRODUCT
+   * ============================================================
+   */
+
+  const removeProduct = (productId) => {
+    setQuoteProducts((prev) =>
+      prev.filter((item) => item.productId !== productId),
+    );
+  };
+
+  /*
+   * ============================================================
+   * CHANGE QUANTITY
+   * ============================================================
+   */
+
+  const changeQuantity = (productId, change) => {
+    setQuoteProducts((prev) =>
+      prev.map((item) => {
+        if (item.productId !== productId) return item;
+
+        const newQuantity = Math.max(1, Number(item.quantity) + change);
+
+        return {
+          ...item,
+          quantity: newQuantity,
+        };
+      }),
+    );
+  };
+
+  /*
+   * ============================================================
+   * CHANGE PRICE
+   * ============================================================
+   */
+
+  const changePrice = (productId, value) => {
+    setQuoteProducts((prev) =>
+      prev.map((item) => {
+        if (item.productId !== productId) return item;
+
+        return {
+          ...item,
+          price: Math.max(0, Number(value) || 0),
+        };
+      }),
+    );
+  };
+
+  /*
+   * ============================================================
+   * TOTAL
+   * ============================================================
+   */
+
+  const quoteTotal = useMemo(() => {
+    return quoteProducts.reduce(
+      (total, item) =>
+        total + Number(item.price || 0) * Number(item.quantity || 1),
+      0,
+    );
+  }, [quoteProducts]);
+
+  /*
+   * ============================================================
+   * CURRENCY
+   * ============================================================
+   */
+
+  const quoteCurrency =
+    quoteProducts.length > 0 ? quoteProducts[0].currency || "USD" : "USD";
+
+  /*
+   * ============================================================
+   * SEND QUOTATION EMAIL
+   * ============================================================
+   */
+
+  const sendQuotation = async () => {
+    if (!selectedQuote) return;
+
+    if (!selectedQuote.email) {
+      alert("This enquiry does not contain a client email.");
+      return;
+    }
+
+    if (quoteProducts.length === 0) {
+      alert("Please select at least one product.");
+      return;
+    }
+
+    try {
+      setSendingQuote(true);
+
+      const response = await api.post(
+        `/quotes/${selectedQuote._id}/send-quotation`,
+        {
+          products: quoteProducts,
+          customNote,
+          total: quoteTotal,
+          currency: quoteCurrency,
+        },
+      );
+
+      if (response.data.success) {
+        alert(`Quotation sent successfully to ${selectedQuote.email}`);
+
+        await updateStatus(selectedQuote._id, "Contacted");
+
+        setQuoteProducts([]);
+        setCustomNote("");
+      }
+    } catch (error) {
+      console.error("Send quotation error:", error);
+
+      if (error.response?.status === 401) {
+        logout();
+        return;
+      }
+
+      alert(error.response?.data?.message || "Unable to send quotation.");
+    } finally {
+      setSendingQuote(false);
+    }
+  };
+
+  /*
+   * ============================================================
+   * FILTER
+   * ============================================================
+   */
+
   const filteredQuotes = useMemo(() => {
     const searchText = search.trim().toLowerCase();
 
@@ -158,6 +408,12 @@ export default function AdminDashboard() {
     });
   }, [quotes, search, statusFilter]);
 
+  /*
+   * ============================================================
+   * STATISTICS
+   * ============================================================
+   */
+
   const stats = useMemo(() => {
     return {
       total: quotes.length,
@@ -175,7 +431,10 @@ export default function AdminDashboard() {
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Page heading */}
+        {/* ======================================================
+            HEADER
+        ======================================================= */}
+
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">
@@ -193,23 +452,35 @@ export default function AdminDashboard() {
 
           <button
             type="button"
-            onClick={fetchQuotes}
-            disabled={loading}
+            onClick={() => {
+              fetchQuotes();
+              fetchProducts();
+            }}
+            disabled={loading || productsLoading}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
+            <RefreshCw
+              size={17}
+              className={loading || productsLoading ? "animate-spin" : ""}
+            />
             Refresh
           </button>
         </div>
 
-        {/* Error */}
+        {/* ======================================================
+            ERROR
+        ======================================================= */}
+
         {error && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {error}
           </div>
         )}
 
-        {/* Statistics */}
+        {/* ======================================================
+            STATISTICS
+        ======================================================= */}
+
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             title="Total Enquiries"
@@ -234,7 +505,10 @@ export default function AdminDashboard() {
           />
         </div>
 
-        {/* Search / filters */}
+        {/* ======================================================
+            SEARCH
+        ======================================================= */}
+
         <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="relative flex-1">
@@ -270,7 +544,10 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Enquiries */}
+        {/* ======================================================
+            ENQUIRIES
+        ======================================================= */}
+
         <section className="mt-6 overflow-hidden rounded-3xl border border-gray-200 bg-white">
           <div className="border-b border-gray-200 px-6 py-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -278,8 +555,9 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-bold">Project Enquiries</h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  {filteredQuotes.length} enquiry
-                  {filteredQuotes.length !== 1 ? "ies" : ""} displayed
+                  {filteredQuotes.length}{" "}
+                  {filteredQuotes.length === 1 ? "enquiry" : "enquiries"}{" "}
+                  displayed
                 </p>
               </div>
 
@@ -357,7 +635,7 @@ export default function AdminDashboard() {
                   <div className="flex shrink-0 gap-2">
                     <button
                       type="button"
-                      onClick={() => setSelectedQuote(quote)}
+                      onClick={() => openQuote(quote)}
                       className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
                     >
                       View Enquiry
@@ -379,18 +657,42 @@ export default function AdminDashboard() {
         </section>
       </div>
 
-      {/* Detail modal */}
+      {/* ========================================================
+          DETAIL MODAL
+      ========================================================= */}
+
       {selectedQuote && (
         <QuoteModal
           quote={selectedQuote}
-          onClose={() => setSelectedQuote(null)}
+          products={products}
+          productsLoading={productsLoading}
+          quoteProducts={quoteProducts}
+          customNote={customNote}
+          setCustomNote={setCustomNote}
+          quoteTotal={quoteTotal}
+          quoteCurrency={quoteCurrency}
+          sendingQuote={sendingQuote}
+          onClose={() => {
+            setSelectedQuote(null);
+            setQuoteProducts([]);
+            setCustomNote("");
+          }}
           onStatusChange={updateStatus}
           onDelete={deleteQuote}
+          onAddProduct={addProduct}
+          onRemoveProduct={removeProduct}
+          onChangeQuantity={changeQuantity}
+          onChangePrice={changePrice}
+          onSendQuotation={sendQuotation}
         />
       )}
     </AdminLayout>
   );
 }
+
+/* ================================================================
+   STAT CARD
+================================================================ */
 
 function StatCard({ title, value, icon: Icon }) {
   return (
@@ -407,6 +709,10 @@ function StatCard({ title, value, icon: Icon }) {
     </div>
   );
 }
+
+/* ================================================================
+   STATUS BADGE
+================================================================ */
 
 function StatusBadge({ status }) {
   const styles = {
@@ -428,12 +734,37 @@ function StatusBadge({ status }) {
   );
 }
 
-function QuoteModal({ quote, onClose, onStatusChange, onDelete }) {
+/* ================================================================
+   QUOTE MODAL
+================================================================ */
+
+function QuoteModal({
+  quote,
+  products,
+  productsLoading,
+  quoteProducts,
+  customNote,
+  setCustomNote,
+  quoteTotal,
+  quoteCurrency,
+  sendingQuote,
+  onClose,
+  onStatusChange,
+  onDelete,
+  onAddProduct,
+  onRemoveProduct,
+  onChangeQuantity,
+  onChangePrice,
+  onSendQuotation,
+}) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
       <div className="flex min-h-full items-center justify-center">
-        <div className="w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-          {/* Modal header */}
+        <div className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+          {/* ====================================================
+              HEADER
+          ===================================================== */}
+
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
             <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-gray-400">
@@ -443,6 +774,10 @@ function QuoteModal({ quote, onClose, onStatusChange, onDelete }) {
               <h2 className="mt-1 truncate text-2xl font-bold">
                 {quote.companyName || "Unnamed Company"}
               </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                {quote.name} · {quote.email}
+              </p>
             </div>
 
             <button
@@ -454,9 +789,14 @@ function QuoteModal({ quote, onClose, onStatusChange, onDelete }) {
             </button>
           </div>
 
-          {/* Modal content */}
-          <div className="max-h-[70vh] overflow-y-auto p-6">
-            <div className="grid gap-4 sm:grid-cols-2">
+          {/* ====================================================
+              CONTENT
+          ===================================================== */}
+
+          <div className="max-h-[75vh] overflow-y-auto p-6">
+            {/* CLIENT DETAILS */}
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Info label="Client" value={quote.name} />
 
               <Info label="Email" value={quote.email} />
@@ -490,7 +830,297 @@ function QuoteModal({ quote, onClose, onStatusChange, onDelete }) {
 
             <TagSection title="Platforms" items={quote.platforms} />
 
-            {/* Status */}
+            {/* ==================================================
+                PRODUCT QUOTATION
+            =================================================== */}
+
+            <div className="mt-10 border-t border-gray-200 pt-8">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Package size={20} />
+
+                    <h3 className="text-lg font-bold">Build Quotation</h3>
+                  </div>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Select products and send their details directly to the
+                    client.
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600">
+                  {products.length}{" "}
+                  {products.length === 1 ? "product" : "products"} available
+                </span>
+              </div>
+
+              {/* PRODUCT SELECTOR */}
+
+              <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                <label className="mb-2 block text-sm font-bold">
+                  Add Product
+                </label>
+
+                {productsLoading ? (
+                  <div className="flex items-center gap-2 py-4 text-sm text-gray-500">
+                    <RefreshCw size={17} className="animate-spin" />
+                    Loading products...
+                  </div>
+                ) : products.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-gray-300 bg-white p-5 text-center">
+                    <Package size={28} className="mx-auto text-gray-300" />
+
+                    <p className="mt-3 text-sm font-semibold">
+                      No products available
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      Add products from the Products section first.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    value=""
+                    onChange={(event) => {
+                      const productId = event.target.value;
+
+                      const product = products.find(
+                        (item) => item._id === productId,
+                      );
+
+                      if (product) {
+                        onAddProduct(product);
+                      }
+                    }}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium outline-none focus:border-gray-950"
+                  >
+                    <option value="">Select a product...</option>
+
+                    {products.map((product) => (
+                      <option
+                        key={product._id}
+                        value={product._id}
+                        disabled={quoteProducts.some(
+                          (item) => item.productId === product._id,
+                        )}
+                      >
+                        {product.name} —{" "}
+                        {formatMoney(product.price, product.currency)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* SELECTED PRODUCTS */}
+
+              {quoteProducts.length > 0 && (
+                <div className="mt-5 space-y-4">
+                  <h4 className="text-sm font-bold">Selected Products</h4>
+
+                  {quoteProducts.map((product) => (
+                    <div
+                      key={product.productId}
+                      className="rounded-2xl border border-gray-200 bg-white p-5"
+                    >
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h5 className="font-bold">{product.name}</h5>
+
+                            {product.category && (
+                              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
+                                {product.category}
+                              </span>
+                            )}
+                          </div>
+
+                          {product.description && (
+                            <p className="mt-2 text-sm leading-6 text-gray-500">
+                              {product.description}
+                            </p>
+                          )}
+
+                          {product.features?.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {product.features.map((feature) => (
+                                <span
+                                  key={feature}
+                                  className="rounded-full bg-gray-50 px-2.5 py-1 text-xs text-gray-600"
+                                >
+                                  {feature}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {product.deliveryTime && (
+                            <p className="mt-3 text-xs font-medium text-gray-500">
+                              Delivery: {product.deliveryTime}
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => onRemoveProduct(product.productId)}
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                          title="Remove product"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      {/* PRICE / QUANTITY */}
+
+                      <div className="mt-5 grid gap-4 border-t border-gray-100 pt-5 sm:grid-cols-3">
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-400">
+                            Price
+                          </label>
+
+                          <div className="flex rounded-xl border border-gray-200 bg-gray-50">
+                            <span className="flex items-center px-3 text-xs font-bold text-gray-500">
+                              {product.currency}
+                            </span>
+
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={product.price}
+                              onChange={(event) =>
+                                onChangePrice(
+                                  product.productId,
+                                  event.target.value,
+                                )
+                              }
+                              className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-semibold outline-none"
+                            />
+                          </div>
+
+                          <p className="mt-1 text-[11px] text-gray-400">
+                            You can customize the price.
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-400">
+                            Quantity
+                          </label>
+
+                          <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onChangeQuantity(product.productId, -1)
+                              }
+                              className="flex h-11 w-11 items-center justify-center hover:bg-gray-100"
+                            >
+                              <Minus size={15} />
+                            </button>
+
+                            <span className="flex-1 text-center text-sm font-bold">
+                              {product.quantity}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onChangeQuantity(product.productId, 1)
+                              }
+                              className="flex h-11 w-11 items-center justify-center hover:bg-gray-100"
+                            >
+                              <Plus size={15} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-400">
+                            Subtotal
+                          </label>
+
+                          <div className="rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white">
+                            {formatMoney(
+                              Number(product.price) * Number(product.quantity),
+                              product.currency,
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* CUSTOM NOTE */}
+
+              <div className="mt-6">
+                <label className="mb-2 flex items-center gap-2 text-sm font-bold">
+                  <FileText size={16} />
+                  Message / Additional Note
+                </label>
+
+                <textarea
+                  value={customNote}
+                  onChange={(event) => setCustomNote(event.target.value)}
+                  rows={5}
+                  placeholder="Add payment terms, special instructions, project notes, discounts, validity, etc."
+                  className="w-full resize-y rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm leading-6 outline-none transition focus:border-gray-950 focus:bg-white"
+                />
+              </div>
+
+              {/* TOTAL */}
+
+              {quoteProducts.length > 0 && (
+                <div className="mt-6 rounded-2xl bg-gray-950 p-5 text-white">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.15em] text-gray-400">
+                        Quotation Total
+                      </p>
+
+                      <p className="mt-1 text-sm text-gray-400">
+                        {quoteProducts.length}{" "}
+                        {quoteProducts.length === 1 ? "product" : "products"}
+                      </p>
+                    </div>
+
+                    <p className="text-2xl font-bold">
+                      {formatMoney(quoteTotal, quoteCurrency)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* SEND */}
+
+              <button
+                type="button"
+                onClick={onSendQuotation}
+                disabled={sendingQuote || quoteProducts.length === 0}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gray-900 px-5 py-4 text-sm font-bold text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {sendingQuote ? (
+                  <>
+                    <RefreshCw size={18} className="animate-spin" />
+                    Sending quotation...
+                  </>
+                ) : (
+                  <>
+                    <Send size={18} />
+                    Send Quotation to {quote.email}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* ==================================================
+                STATUS
+            =================================================== */}
+
             <div className="mt-8 border-t border-gray-200 pt-7">
               <label className="mb-3 block text-sm font-bold">
                 Enquiry Status
@@ -515,7 +1145,10 @@ function QuoteModal({ quote, onClose, onStatusChange, onDelete }) {
             </div>
           </div>
 
-          {/* Footer */}
+          {/* ====================================================
+              FOOTER
+          ===================================================== */}
+
           <div className="flex justify-between border-t border-gray-200 bg-gray-50 px-6 py-5">
             <button
               type="button"
@@ -540,6 +1173,10 @@ function QuoteModal({ quote, onClose, onStatusChange, onDelete }) {
   );
 }
 
+/* ================================================================
+   INFO
+================================================================ */
+
 function Info({ label, value }) {
   return (
     <div className="rounded-2xl bg-gray-50 p-4">
@@ -554,6 +1191,10 @@ function Info({ label, value }) {
   );
 }
 
+/* ================================================================
+   DETAIL SECTION
+================================================================ */
+
 function DetailSection({ title, content }) {
   return (
     <div className="mt-7">
@@ -565,6 +1206,10 @@ function DetailSection({ title, content }) {
     </div>
   );
 }
+
+/* ================================================================
+   TAG SECTION
+================================================================ */
 
 function TagSection({ title, items = [] }) {
   return (
@@ -589,6 +1234,10 @@ function TagSection({ title, items = [] }) {
   );
 }
 
+/* ================================================================
+   FORMAT SOLUTION
+================================================================ */
+
 function formatSolution(solution) {
   const values = {
     website: "Website",
@@ -601,6 +1250,28 @@ function formatSolution(solution) {
 
   return values[solution] || solution || "Custom Project";
 }
+
+/* ================================================================
+   FORMAT MONEY
+================================================================ */
+
+function formatMoney(value, currency = "USD") {
+  const amount = Number(value) || 0;
+
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currency || "USD",
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currency || "USD"} ${amount.toFixed(2)}`;
+  }
+}
+
+/* ================================================================
+   FORMAT DATE
+================================================================ */
 
 function formatDate(date) {
   if (!date) return "Unknown";
