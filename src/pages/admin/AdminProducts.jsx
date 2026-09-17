@@ -1,53 +1,71 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Edit3, Package, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import {
+  Edit3,
+  Package,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 
-const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
-).replace(/\/$/, "");
+const API_URL = import.meta.env.VITE_API_URL;
+
+const categories = [
+  "Website",
+  "Mobile App",
+  "Desktop App",
+  "Software",
+  "Digital Marketing",
+  "UI/UX Design",
+  "Other",
+];
+
+const currencies = ["USD", "CAD", "AUD", "GBP", "INR"];
 
 const emptyForm = {
   name: "",
-  category: "",
+  category: "Website",
   description: "",
+  features: "",
   price: "",
   currency: "USD",
-  features: [],
   deliveryTime: "",
-  notes: "",
   active: true,
 };
 
-export function AdminProducts() {
+export default function AdminProducts() {
   const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
+
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
 
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("All");
-
   const [form, setForm] = useState(emptyForm);
-  const [featureInput, setFeatureInput] = useState("");
-  const [saving, setSaving] = useState(false);
 
   const token = localStorage.getItem("adminToken");
 
   const api = useMemo(() => {
     return axios.create({
       baseURL: API_URL,
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : {},
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
     });
   }, [token]);
 
@@ -57,6 +75,12 @@ export function AdminProducts() {
 
     navigate("/admin/login", { replace: true });
   }, [navigate]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | FETCH PRODUCTS
+  |--------------------------------------------------------------------------
+  */
 
   const fetchProducts = useCallback(async () => {
     if (!token) {
@@ -70,20 +94,10 @@ export function AdminProducts() {
 
       const response = await api.get("/products");
 
-      console.log("Products API response:", response.data);
-
-      if (response.data?.success) {
-        const productList = Array.isArray(response.data.products)
-          ? response.data.products
-          : Array.isArray(response.data.data)
-            ? response.data.data
-            : [];
-
-        setProducts(productList);
+      if (response.data.success) {
+        setProducts(response.data.products || []);
       } else {
-        setProducts([]);
-
-        setError(response.data?.message || "Unable to load products.");
+        setError(response.data.message || "Unable to load products.");
       }
     } catch (error) {
       console.error("Get products error:", error);
@@ -93,11 +107,7 @@ export function AdminProducts() {
         return;
       }
 
-      setError(
-        error.response?.data?.message ||
-          error.message ||
-          "Unable to load products.",
-      );
+      setError(error.response?.data?.message || "Unable to load products.");
     } finally {
       setLoading(false);
     }
@@ -107,163 +117,145 @@ export function AdminProducts() {
     fetchProducts();
   }, [fetchProducts]);
 
-  const openAddModal = () => {
+  /*
+  |--------------------------------------------------------------------------
+  | OPEN CREATE MODAL
+  |--------------------------------------------------------------------------
+  */
+
+  const openCreateModal = () => {
     setEditingProduct(null);
-    setForm({
-      ...emptyForm,
-      features: [],
-    });
-    setFeatureInput("");
+    setForm(emptyForm);
     setError("");
+    setSuccess("");
     setModalOpen(true);
   };
+
+  /*
+  |--------------------------------------------------------------------------
+  | OPEN EDIT MODAL
+  |--------------------------------------------------------------------------
+  */
 
   const openEditModal = (product) => {
     setEditingProduct(product);
 
     setForm({
       name: product.name || "",
-      category: product.category || "",
+      category: product.category || "Website",
       description: product.description || "",
+      features: Array.isArray(product.features)
+        ? product.features.join(", ")
+        : "",
       price: product.price ?? "",
       currency: product.currency || "USD",
-      features: Array.isArray(product.features) ? product.features : [],
       deliveryTime: product.deliveryTime || "",
-      notes: product.notes || "",
       active: product.active !== false,
     });
 
-    setFeatureInput("");
     setError("");
+    setSuccess("");
     setModalOpen(true);
   };
+
+  /*
+  |--------------------------------------------------------------------------
+  | CLOSE MODAL
+  |--------------------------------------------------------------------------
+  */
 
   const closeModal = () => {
     if (saving) return;
 
     setModalOpen(false);
     setEditingProduct(null);
-    setFeatureInput("");
-
-    setForm({
-      ...emptyForm,
-      features: [],
-    });
+    setForm(emptyForm);
   };
 
-  const handleChange = (event) => {
-    const { name, value, type, checked } = event.target;
+  /*
+  |--------------------------------------------------------------------------
+  | FORM CHANGE
+  |--------------------------------------------------------------------------
+  */
 
+  const updateField = (field, value) => {
     setForm((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [field]: value,
     }));
   };
 
-  const addFeature = () => {
-    const feature = featureInput.trim();
+  /*
+  |--------------------------------------------------------------------------
+  | SAVE PRODUCT
+  |--------------------------------------------------------------------------
+  */
 
-    if (!feature) return;
-
-    const exists = form.features.some(
-      (item) => item.toLowerCase() === feature.toLowerCase(),
-    );
-
-    if (exists) {
-      setFeatureInput("");
-      return;
-    }
-
-    setForm((prev) => ({
-      ...prev,
-      features: [...prev.features, feature],
-    }));
-
-    setFeatureInput("");
-  };
-
-  const removeFeature = (featureToRemove) => {
-    setForm((prev) => ({
-      ...prev,
-      features: prev.features.filter((feature) => feature !== featureToRemove),
-    }));
-  };
-
-  const handleFeatureKeyDown = (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      addFeature();
-    }
-  };
-
-  const handleSubmit = async (event) => {
+  const saveProduct = async (event) => {
     event.preventDefault();
 
-    if (!form.name.trim()) {
-      alert("Please enter a product name.");
+    setError("");
+    setSuccess("");
+
+    const name = form.name.trim();
+
+    if (!name) {
+      setError("Product name is required.");
       return;
     }
 
-    if (!form.category.trim()) {
-      alert("Please enter a category.");
+    const price = Number(form.price);
+
+    if (!Number.isFinite(price) || price < 0) {
+      setError("Please enter a valid product price.");
       return;
     }
 
-    if (
-      form.price === "" ||
-      Number.isNaN(Number(form.price)) ||
-      Number(form.price) < 0
-    ) {
-      alert("Please enter a valid price.");
-      return;
-    }
+    const features = form.features
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
 
-    if (!form.currency.trim()) {
-      alert("Please select a currency.");
-      return;
-    }
+    const payload = {
+      name,
+      category: form.category,
+      description: form.description.trim(),
+      features,
+      price,
+      currency: form.currency,
+      deliveryTime: form.deliveryTime.trim(),
+      active: Boolean(form.active),
+    };
 
     try {
       setSaving(true);
 
-      const payload = {
-        name: form.name.trim(),
-        category: form.category.trim(),
-        description: form.description.trim(),
-        price: Number(form.price),
-        currency: form.currency.trim().toUpperCase(),
-        features: form.features,
-        deliveryTime: form.deliveryTime.trim(),
-        notes: form.notes.trim(),
-        active: Boolean(form.active),
-      };
-
       let response;
 
-      if (editingProduct) {
+      if (editingProduct?._id) {
         response = await api.patch(`/products/${editingProduct._id}`, payload);
       } else {
         response = await api.post("/products", payload);
       }
 
-      if (!response.data?.success) {
-        alert(response.data?.message || "Unable to save product.");
-        return;
+      if (!response.data.success) {
+        throw new Error(response.data.message || "Unable to save product.");
       }
 
-      const savedProduct = response.data.product;
+      setSuccess(
+        editingProduct
+          ? "Product updated successfully."
+          : "Product created successfully.",
+      );
 
-      if (editingProduct) {
-        setProducts((prev) =>
-          prev.map((product) =>
-            product._id === editingProduct._id ? savedProduct : product,
-          ),
-        );
-      } else {
-        setProducts((prev) => [savedProduct, ...prev]);
-      }
+      await fetchProducts();
 
-      closeModal();
+      setTimeout(() => {
+        setModalOpen(false);
+        setEditingProduct(null);
+        setForm(emptyForm);
+        setSuccess("");
+      }, 500);
     } catch (error) {
       console.error("Save product error:", error);
 
@@ -272,7 +264,7 @@ export function AdminProducts() {
         return;
       }
 
-      alert(
+      setError(
         error.response?.data?.message ||
           error.message ||
           "Unable to save product.",
@@ -282,6 +274,12 @@ export function AdminProducts() {
     }
   };
 
+  /*
+  |--------------------------------------------------------------------------
+  | DELETE PRODUCT
+  |--------------------------------------------------------------------------
+  */
+
   const deleteProduct = async (product) => {
     const confirmed = window.confirm(
       `Are you sure you want to delete "${product.name}"?`,
@@ -290,13 +288,21 @@ export function AdminProducts() {
     if (!confirmed) return;
 
     try {
+      setError("");
+
       const response = await api.delete(`/products/${product._id}`);
 
-      if (response.data?.success) {
-        setProducts((prev) => prev.filter((item) => item._id !== product._id));
-      } else {
-        alert(response.data?.message || "Unable to delete product.");
+      if (!response.data.success) {
+        throw new Error(response.data.message || "Unable to delete product.");
       }
+
+      setProducts((prev) => prev.filter((item) => item._id !== product._id));
+
+      setSuccess("Product deleted successfully.");
+
+      setTimeout(() => {
+        setSuccess("");
+      }, 2500);
     } catch (error) {
       console.error("Delete product error:", error);
 
@@ -305,7 +311,7 @@ export function AdminProducts() {
         return;
       }
 
-      alert(
+      setError(
         error.response?.data?.message ||
           error.message ||
           "Unable to delete product.",
@@ -313,81 +319,50 @@ export function AdminProducts() {
     }
   };
 
-  const toggleActive = async (product) => {
-    try {
-      const response = await api.patch(`/products/${product._id}`, {
-        active: !product.active,
-      });
-
-      if (response.data?.success) {
-        setProducts((prev) =>
-          prev.map((item) =>
-            item._id === product._id ? response.data.product : item,
-          ),
-        );
-      } else {
-        alert(response.data?.message || "Unable to update product.");
-      }
-    } catch (error) {
-      console.error("Toggle product status error:", error);
-
-      if (error.response?.status === 401) {
-        logout();
-        return;
-      }
-
-      alert(
-        error.response?.data?.message ||
-          error.message ||
-          "Unable to update product.",
-      );
-    }
-  };
-
-  const categories = useMemo(() => {
-    return [
-      ...new Set(products.map((product) => product.category).filter(Boolean)),
-    ].sort();
-  }, [products]);
+  /*
+  |--------------------------------------------------------------------------
+  | FILTER
+  |--------------------------------------------------------------------------
+  */
 
   const filteredProducts = useMemo(() => {
-    const searchText = search.trim().toLowerCase();
+    const text = search.trim().toLowerCase();
 
     return products.filter((product) => {
       const matchesSearch =
-        !searchText ||
-        product.name?.toLowerCase().includes(searchText) ||
-        product.category?.toLowerCase().includes(searchText) ||
-        product.description?.toLowerCase().includes(searchText);
+        !text ||
+        product.name?.toLowerCase().includes(text) ||
+        product.category?.toLowerCase().includes(text) ||
+        product.description?.toLowerCase().includes(text);
 
-      const matchesCategory =
-        categoryFilter === "All" || product.category === categoryFilter;
+      const isActive = product.active !== false;
 
-      return matchesSearch && matchesCategory;
+      const matchesStatus =
+        statusFilter === "All" ||
+        (statusFilter === "Active" && isActive) ||
+        (statusFilter === "Inactive" && !isActive);
+
+      return matchesSearch && matchesStatus;
     });
-  }, [products, search, categoryFilter]);
-
-  const activeCount = products.filter((item) => item.active !== false).length;
-
-  const inactiveCount = products.length - activeCount;
+  }, [products, search, statusFilter]);
 
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* HEADER */}
+        {/* ======================================================
+            HEADER
+        ======================================================= */}
 
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">
-              Catalogue
+              Products
             </p>
 
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">
-              Products & Services
-            </h1>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">Products</h1>
 
             <p className="mt-2 text-sm text-gray-500">
-              Manage the products and services available for client quotations.
+              Manage products and services available for client quotations.
             </p>
           </div>
 
@@ -396,16 +371,16 @@ export function AdminProducts() {
               type="button"
               onClick={fetchProducts}
               disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold transition hover:bg-gray-50 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold transition hover:bg-gray-50 disabled:opacity-50"
             >
-              <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
               Refresh
             </button>
 
             <button
               type="button"
-              onClick={openAddModal}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
             >
               <Plus size={17} />
               Add Product
@@ -413,7 +388,9 @@ export function AdminProducts() {
           </div>
         </div>
 
-        {/* ERROR */}
+        {/* ======================================================
+            MESSAGES
+        ======================================================= */}
 
         {error && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
@@ -421,133 +398,130 @@ export function AdminProducts() {
           </div>
         )}
 
-        {/* STATS */}
+        {success && (
+          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-700">
+            {success}
+          </div>
+        )}
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          <MiniStat label="Total Products" value={products.length} />
-
-          <MiniStat label="Active" value={activeCount} />
-
-          <MiniStat label="Inactive" value={inactiveCount} />
-        </div>
-
-        {/* FILTERS */}
+        {/* ======================================================
+            FILTERS
+        ======================================================= */}
 
         <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search products or services..."
-              className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-gray-950 focus:bg-white"
-            />
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <div className="relative flex-1">
+              <Search
+                size={18}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search products..."
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-gray-950 focus:bg-white"
+              />
+            </div>
 
             <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
               className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium outline-none focus:border-gray-950"
             >
-              <option value="All">All Categories</option>
-
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
+              <option value="All">All Products</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
             </select>
           </div>
         </div>
 
-        {/* PRODUCTS */}
+        {/* ======================================================
+            PRODUCTS
+        ======================================================= */}
 
         <section className="mt-6 overflow-hidden rounded-3xl border border-gray-200 bg-white">
           <div className="border-b border-gray-200 px-6 py-5">
             <h2 className="text-lg font-bold">Product Catalogue</h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              {filteredProducts.length} product
-              {filteredProducts.length !== 1 ? "s" : ""}
+              {filteredProducts.length}{" "}
+              {filteredProducts.length === 1 ? "product" : "products"} displayed
             </p>
           </div>
 
           {loading ? (
             <div className="p-16 text-center">
               <RefreshCw
-                size={28}
+                size={30}
                 className="mx-auto animate-spin text-gray-400"
               />
 
-              <p className="mt-4 text-sm text-gray-500">Loading products...</p>
+              <p className="mt-4 text-sm font-medium text-gray-500">
+                Loading products...
+              </p>
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="p-16 text-center">
               <Package size={40} className="mx-auto text-gray-300" />
 
-              <p className="mt-5 font-semibold">
-                {products.length === 0
-                  ? "No products available"
-                  : "No products found"}
-              </p>
+              <p className="mt-5 font-semibold">No products found</p>
 
               <p className="mt-2 text-sm text-gray-500">
-                {products.length === 0
-                  ? "Add your first product or service to get started."
-                  : "Try changing your search or category filter."}
+                Add your first product to use it in quotations.
               </p>
 
-              {products.length === 0 && (
-                <button
-                  type="button"
-                  onClick={openAddModal}
-                  className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-                >
-                  <Plus size={17} />
-                  Add Product
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+              >
+                <Plus size={16} />
+                Add Product
+              </button>
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {filteredProducts.map((product) => (
-                <div
-                  key={product._id}
-                  className="p-6 transition hover:bg-gray-50"
-                >
-                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h3 className="text-lg font-bold text-gray-950">
-                          {product.name}
-                        </h3>
+              {filteredProducts.map((product) => {
+                const active = product.active !== false;
 
-                        <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
-                          {product.category}
-                        </span>
+                return (
+                  <div
+                    key={product._id}
+                    className="p-6 transition hover:bg-gray-50"
+                  >
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-bold">{product.name}</h3>
 
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                            product.active !== false
-                              ? "bg-green-50 text-green-700"
-                              : "bg-gray-100 text-gray-500"
-                          }`}
-                        >
-                          {product.active !== false ? "Active" : "Inactive"}
-                        </span>
-                      </div>
+                          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                            {product.category || "Other"}
+                          </span>
 
-                      {product.description && (
-                        <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-500">
-                          {product.description}
-                        </p>
-                      )}
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              active
+                                ? "bg-green-50 text-green-700"
+                                : "bg-gray-100 text-gray-500"
+                            }`}
+                          >
+                            {active ? "Active" : "Inactive"}
+                          </span>
+                        </div>
 
-                      {Array.isArray(product.features) &&
-                        product.features.length > 0 && (
+                        {product.description && (
+                          <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-500">
+                            {product.description}
+                          </p>
+                        )}
+
+                        {product.features?.length > 0 && (
                           <div className="mt-4 flex flex-wrap gap-2">
-                            {product.features.map((feature) => (
+                            {product.features.map((feature, index) => (
                               <span
-                                key={feature}
+                                key={`${feature}-${index}`}
                                 className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600"
                               >
                                 {feature}
@@ -556,368 +530,311 @@ export function AdminProducts() {
                           </div>
                         )}
 
-                      <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-500">
-                        {product.deliveryTime && (
-                          <span>Delivery: {product.deliveryTime}</span>
-                        )}
+                        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+                          <span className="text-lg font-bold text-gray-950">
+                            {formatPrice(product.price, product.currency)}
+                          </span>
 
-                        {product.notes && <span>Notes: {product.notes}</span>}
+                          {product.deliveryTime && (
+                            <span className="text-sm text-gray-500">
+                              Delivery: {product.deliveryTime}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex shrink-0 flex-col items-start gap-4 lg:items-end">
-                      <div className="text-2xl font-bold text-gray-950">
-                        {formatPrice(product.price, product.currency)}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleActive(product)}
-                          className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold transition hover:bg-gray-100"
-                        >
-                          {product.active !== false ? "Deactivate" : "Activate"}
-                        </button>
-
+                      <div className="flex shrink-0 gap-2">
                         <button
                           type="button"
                           onClick={() => openEditModal(product)}
-                          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold transition hover:bg-gray-100"
+                          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold transition hover:bg-gray-100"
                         >
-                          <Edit3 size={15} />
+                          <Edit3 size={16} />
                           Edit
                         </button>
 
                         <button
                           type="button"
                           onClick={() => deleteProduct(product)}
-                          className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                          className="flex h-11 w-11 items-center justify-center rounded-xl border border-red-200 text-red-600 transition hover:bg-red-50"
+                          title="Delete product"
                         >
-                          <Trash2 size={15} />
-                          Delete
+                          <Trash2 size={17} />
                         </button>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
       </div>
 
-      {/* MODAL */}
+      {/* ========================================================
+          PRODUCT MODAL
+      ========================================================= */}
 
       {modalOpen && (
-        <ProductModal
-          editingProduct={editingProduct}
-          form={form}
-          featureInput={featureInput}
-          saving={saving}
-          onChange={handleChange}
-          onFeatureInputChange={setFeatureInput}
-          onAddFeature={addFeature}
-          onRemoveFeature={removeFeature}
-          onFeatureKeyDown={handleFeatureKeyDown}
-          onSubmit={handleSubmit}
-          onClose={closeModal}
-        />
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
+          <div className="flex min-h-full items-center justify-center">
+            <div className="w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+              {/* Header */}
+
+              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.15em] text-gray-400">
+                    Product
+                  </p>
+
+                  <h2 className="mt-1 text-2xl font-bold">
+                    {editingProduct ? "Edit Product" : "Add Product"}
+                  </h2>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  disabled={saving}
+                  className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-gray-100 disabled:opacity-50"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Form */}
+
+              <form onSubmit={saveProduct}>
+                <div className="max-h-[70vh] overflow-y-auto p-6">
+                  {error && (
+                    <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
+                      {error}
+                    </div>
+                  )}
+
+                  {success && (
+                    <div className="mb-5 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-700">
+                      {success}
+                    </div>
+                  )}
+
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    {/* Name */}
+
+                    <div className="sm:col-span-2">
+                      <label className="mb-2 block text-sm font-semibold">
+                        Product Name
+                      </label>
+
+                      <input
+                        type="text"
+                        value={form.name}
+                        onChange={(event) =>
+                          updateField("name", event.target.value)
+                        }
+                        placeholder="Website Development"
+                        required
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-gray-950"
+                      />
+                    </div>
+
+                    {/* Category */}
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold">
+                        Category
+                      </label>
+
+                      <select
+                        value={form.category}
+                        onChange={(event) =>
+                          updateField("category", event.target.value)
+                        }
+                        className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-gray-950"
+                      >
+                        {categories.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Currency */}
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold">
+                        Currency
+                      </label>
+
+                      <select
+                        value={form.currency}
+                        onChange={(event) =>
+                          updateField("currency", event.target.value)
+                        }
+                        className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-gray-950"
+                      >
+                        {currencies.map((currency) => (
+                          <option key={currency} value={currency}>
+                            {currency}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Price */}
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold">
+                        Price
+                      </label>
+
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.price}
+                        onChange={(event) =>
+                          updateField("price", event.target.value)
+                        }
+                        placeholder="1000"
+                        required
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-gray-950"
+                      />
+                    </div>
+
+                    {/* Delivery */}
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold">
+                        Delivery Time
+                      </label>
+
+                      <input
+                        type="text"
+                        value={form.deliveryTime}
+                        onChange={(event) =>
+                          updateField("deliveryTime", event.target.value)
+                        }
+                        placeholder="7-10 business days"
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-gray-950"
+                      />
+                    </div>
+
+                    {/* Description */}
+
+                    <div className="sm:col-span-2">
+                      <label className="mb-2 block text-sm font-semibold">
+                        Description
+                      </label>
+
+                      <textarea
+                        value={form.description}
+                        onChange={(event) =>
+                          updateField("description", event.target.value)
+                        }
+                        rows={4}
+                        placeholder="Describe this product or service..."
+                        className="w-full resize-y rounded-xl border border-gray-200 px-4 py-3 text-sm leading-6 outline-none focus:border-gray-950"
+                      />
+                    </div>
+
+                    {/* Features */}
+
+                    <div className="sm:col-span-2">
+                      <label className="mb-2 block text-sm font-semibold">
+                        Features
+                      </label>
+
+                      <input
+                        type="text"
+                        value={form.features}
+                        onChange={(event) =>
+                          updateField("features", event.target.value)
+                        }
+                        placeholder="Responsive Design, SEO, Admin Panel"
+                        className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-gray-950"
+                      />
+
+                      <p className="mt-2 text-xs text-gray-400">
+                        Separate features with commas.
+                      </p>
+                    </div>
+
+                    {/* Active */}
+
+                    <div className="sm:col-span-2">
+                      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 p-4">
+                        <input
+                          type="checkbox"
+                          checked={form.active}
+                          onChange={(event) =>
+                            updateField("active", event.target.checked)
+                          }
+                          className="h-4 w-4"
+                        />
+
+                        <span>
+                          <span className="block text-sm font-semibold">
+                            Active Product
+                          </span>
+
+                          <span className="mt-1 block text-xs text-gray-500">
+                            Active products appear in the quotation builder.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+
+                <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-5">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    disabled={saving}
+                    className="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold transition hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saving && <RefreshCw size={16} className="animate-spin" />}
+
+                    {saving
+                      ? "Saving..."
+                      : editingProduct
+                        ? "Update Product"
+                        : "Create Product"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
       )}
     </AdminLayout>
   );
 }
 
 /* ================================================================
-   MODAL
-================================================================ */
-
-function ProductModal({
-  editingProduct,
-  form,
-  featureInput,
-  saving,
-  onChange,
-  onFeatureInputChange,
-  onAddFeature,
-  onRemoveFeature,
-  onFeatureKeyDown,
-  onSubmit,
-  onClose,
-}) {
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
-      <div className="flex min-h-full items-center justify-center py-8">
-        <div className="w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.15em] text-gray-400">
-                Product Catalogue
-              </p>
-
-              <h2 className="mt-1 text-2xl font-bold">
-                {editingProduct ? "Edit Product" : "Add Product"}
-              </h2>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-gray-100 disabled:opacity-50"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          <form onSubmit={onSubmit}>
-            <div className="max-h-[70vh] overflow-y-auto p-6">
-              <div className="grid gap-5 sm:grid-cols-2">
-                <Field
-                  label="Product / Service Name"
-                  name="name"
-                  value={form.name}
-                  onChange={onChange}
-                  placeholder="Website Development"
-                  required
-                />
-
-                <Field
-                  label="Category"
-                  name="category"
-                  value={form.category}
-                  onChange={onChange}
-                  placeholder="Website"
-                  required
-                />
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold">
-                    Price
-                  </label>
-
-                  <div className="flex">
-                    <select
-                      name="currency"
-                      value={form.currency}
-                      onChange={onChange}
-                      className="w-28 rounded-l-xl border border-r-0 border-gray-200 bg-gray-50 px-3 py-3 text-sm font-semibold outline-none focus:border-gray-950"
-                    >
-                      <option value="USD">USD</option>
-                      <option value="CAD">CAD</option>
-                      <option value="AUD">AUD</option>
-                      <option value="GBP">GBP</option>
-                      <option value="INR">INR</option>
-                    </select>
-
-                    <input
-                      type="number"
-                      name="price"
-                      value={form.price}
-                      onChange={onChange}
-                      min="0"
-                      step="0.01"
-                      placeholder="499"
-                      required
-                      className="min-w-0 flex-1 rounded-r-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-gray-950"
-                    />
-                  </div>
-                </div>
-
-                <Field
-                  label="Delivery Time"
-                  name="deliveryTime"
-                  value={form.deliveryTime}
-                  onChange={onChange}
-                  placeholder="7-14 days"
-                />
-              </div>
-
-              <div className="mt-5">
-                <label className="mb-2 block text-sm font-semibold">
-                  Description
-                </label>
-
-                <textarea
-                  name="description"
-                  value={form.description}
-                  onChange={onChange}
-                  rows={4}
-                  placeholder="Describe what the client receives..."
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm leading-6 outline-none transition focus:border-gray-950"
-                />
-              </div>
-
-              <div className="mt-5">
-                <label className="mb-2 block text-sm font-semibold">
-                  Features / Included Items
-                </label>
-
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={featureInput}
-                    onChange={(event) =>
-                      onFeatureInputChange(event.target.value)
-                    }
-                    onKeyDown={onFeatureKeyDown}
-                    placeholder="e.g. Responsive Design"
-                    className="min-w-0 flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-gray-950"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={onAddFeature}
-                    className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
-                  >
-                    Add
-                  </button>
-                </div>
-
-                {form.features.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {form.features.map((feature) => (
-                      <span
-                        key={feature}
-                        className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-700"
-                      >
-                        {feature}
-
-                        <button
-                          type="button"
-                          onClick={() => onRemoveFeature(feature)}
-                          className="text-gray-400 hover:text-red-600"
-                        >
-                          <X size={13} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-5">
-                <label className="mb-2 block text-sm font-semibold">
-                  Notes
-                </label>
-
-                <textarea
-                  name="notes"
-                  value={form.notes}
-                  onChange={onChange}
-                  rows={3}
-                  placeholder="Optional notes, exclusions, conditions..."
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm leading-6 outline-none focus:border-gray-950"
-                />
-              </div>
-
-              <label className="mt-5 flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 p-4">
-                <input
-                  type="checkbox"
-                  name="active"
-                  checked={form.active}
-                  onChange={onChange}
-                  className="h-4 w-4"
-                />
-
-                <div>
-                  <p className="text-sm font-semibold">Product is active</p>
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    Active products will be available when creating client
-                    quotations.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-5">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={saving}
-                className="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold hover:bg-gray-100 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-gray-950 px-6 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving && <RefreshCw size={16} className="animate-spin" />}
-
-                {saving
-                  ? "Saving..."
-                  : editingProduct
-                    ? "Update Product"
-                    : "Create Product"}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ================================================================
-   FIELD
-================================================================ */
-
-function Field({
-  label,
-  name,
-  value,
-  onChange,
-  placeholder,
-  required = false,
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-semibold">{label}</label>
-
-      <input
-        type="text"
-        name={name}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        required={required}
-        className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-gray-950"
-      />
-    </div>
-  );
-}
-
-/* ================================================================
-   STAT
-================================================================ */
-
-function MiniStat({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5">
-      <p className="text-sm font-medium text-gray-500">{label}</p>
-
-      <p className="mt-2 text-3xl font-bold">{value}</p>
-    </div>
-  );
-}
-
-/* ================================================================
-   PRICE
+   FORMAT PRICE
 ================================================================ */
 
 function formatPrice(price, currency = "USD") {
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",
-      currency,
+      currency: currency || "USD",
       maximumFractionDigits: 2,
     }).format(Number(price) || 0);
   } catch {
-    return `${currency} ${Number(price) || 0}`;
+    return `${currency || "USD"} ${Number(price) || 0}`;
   }
 }
-
-export default AdminProducts;

@@ -504,21 +504,32 @@ export default function AdminDashboard() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              fetchQuotes();
-              fetchProducts();
-            }}
-            disabled={loading || productsLoading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCw
-              size={17}
-              className={loading || productsLoading ? "animate-spin" : ""}
-            />
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/admin/products")}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold transition hover:bg-gray-50"
+            >
+              <Package size={17} />
+              Products
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                fetchQuotes();
+                fetchProducts();
+              }}
+              disabled={loading || productsLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw
+                size={17}
+                className={loading || productsLoading ? "animate-spin" : ""}
+              />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* ERROR */}
