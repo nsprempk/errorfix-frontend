@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { Menu, X, ChevronDown, ArrowRight } from "lucide-react";
+import { Menu, X, ChevronDown, ArrowRight, Phone } from "lucide-react";
 
 const services = [
   {
@@ -85,10 +85,6 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* =====================================================
-            LOGO
-        ====================================================== */}
-
         <Link
           to="/"
           onClick={closeMenus}
@@ -110,10 +106,6 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* =====================================================
-            DESKTOP NAVIGATION
-        ====================================================== */}
-
         <nav
           className="hidden items-center gap-7 lg:flex"
           aria-label="Main navigation"
@@ -122,7 +114,6 @@ export default function Navbar() {
 
           <DesktopLink to="/about" label="About" />
 
-          {/* Services */}
           <DesktopDropdown
             label="Services"
             menu="services"
@@ -131,7 +122,6 @@ export default function Navbar() {
             items={services}
           />
 
-          {/* Solutions */}
           <DesktopDropdown
             label="Solutions"
             menu="solutions"
@@ -140,7 +130,6 @@ export default function Navbar() {
             items={solutions}
           />
 
-          {/* Industries */}
           <DesktopDropdown
             label="Industries"
             menu="industries"
@@ -154,11 +143,16 @@ export default function Navbar() {
           <DesktopLink to="/portfolio" label="Portfolio" />
         </nav>
 
-        {/* =====================================================
-            DESKTOP CTA
-        ====================================================== */}
+        <div className="hidden items-center gap-3 lg:flex">
+          <a
+            href="tel:+18257931477"
+            className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-900 transition hover:border-gray-900 hover:bg-gray-50"
+            aria-label="Call Errorfix Solution"
+          >
+            <Phone size={16} />
+            Call Us at : +1 (825)-793-1477
+          </a>
 
-        <div className="hidden lg:block">
           <Link
             to="/get-quote"
             className="inline-flex items-center gap-2 rounded-full bg-gray-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-700"
@@ -167,10 +161,6 @@ export default function Navbar() {
             <ArrowRight size={16} />
           </Link>
         </div>
-
-        {/* =====================================================
-            MOBILE MENU BUTTON
-        ====================================================== */}
 
         <button
           type="button"
@@ -188,10 +178,6 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* =====================================================
-          MOBILE NAVIGATION
-      ====================================================== */}
-
       {mobileOpen && (
         <div className="border-t border-gray-200 bg-white lg:hidden">
           <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
@@ -200,7 +186,6 @@ export default function Navbar() {
 
               <MobileLink to="/about" label="About" onClick={closeMenus} />
 
-              {/* Mobile Services */}
               <MobileDropdown
                 label="Services"
                 menu="services"
@@ -210,7 +195,6 @@ export default function Navbar() {
                 onNavigate={closeMenus}
               />
 
-              {/* Mobile Solutions */}
               <MobileDropdown
                 label="Solutions"
                 menu="solutions"
@@ -220,7 +204,6 @@ export default function Navbar() {
                 onNavigate={closeMenus}
               />
 
-              {/* Mobile Industries */}
               <MobileDropdown
                 label="Industries"
                 menu="industries"
@@ -246,10 +229,19 @@ export default function Navbar() {
 
               <MobileLink to="/faq" label="FAQ" onClick={closeMenus} />
 
+              <a
+                href="tel:+18257931477"
+                onClick={closeMenus}
+                className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm font-semibold text-gray-900 transition hover:border-gray-900 hover:bg-gray-50"
+              >
+                <Phone size={17} />
+                Call Us
+              </a>
+
               <Link
                 to="/get-quote"
                 onClick={closeMenus}
-                className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-gray-700"
+                className="flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-gray-700"
               >
                 Get a Quote
                 <ArrowRight size={17} />
@@ -261,10 +253,6 @@ export default function Navbar() {
     </header>
   );
 }
-
-/* ============================================================
-   DESKTOP LINK
-============================================================ */
 
 function DesktopLink({ to, label }) {
   return (
@@ -280,10 +268,6 @@ function DesktopLink({ to, label }) {
     </NavLink>
   );
 }
-
-/* ============================================================
-   DESKTOP DROPDOWN
-============================================================ */
 
 function DesktopDropdown({ label, menu, open, setOpen, items }) {
   return (
@@ -333,10 +317,6 @@ function DesktopDropdown({ label, menu, open, setOpen, items }) {
   );
 }
 
-/* ============================================================
-   MOBILE LINK
-============================================================ */
-
 function MobileLink({ to, label, onClick }) {
   return (
     <NavLink
@@ -354,10 +334,6 @@ function MobileLink({ to, label, onClick }) {
     </NavLink>
   );
 }
-
-/* ============================================================
-   MOBILE DROPDOWN
-============================================================ */
 
 function MobileDropdown({ label, menu, open, onToggle, items, onNavigate }) {
   return (
