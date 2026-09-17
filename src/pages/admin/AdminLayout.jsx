@@ -40,15 +40,11 @@ export default function AdminLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-950">
-      {/* =========================================================
-          HEADER
-      ========================================================== */}
-
+      {/* Header */}
       <header className="sticky top-0 z-40 border-b border-gray-200 bg-white">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
             {/* Mobile menu button */}
-
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
@@ -58,23 +54,16 @@ export default function AdminLayout({ children }) {
               <Menu size={20} />
             </button>
 
-            {/* Brand */}
-
-            <button
-              type="button"
-              onClick={() => navigate("/admin/dashboard")}
-              className="text-left"
-            >
+            <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-gray-400">
                 Errorfix Solution
               </p>
 
               <p className="text-sm font-bold">Admin Panel</p>
-            </button>
+            </div>
           </div>
 
           {/* Logout */}
-
           <button
             type="button"
             onClick={logout}
@@ -87,29 +76,22 @@ export default function AdminLayout({ children }) {
         </div>
       </header>
 
-      {/* =========================================================
-          BODY
-      ========================================================== */}
-
       <div className="flex">
-        {/* =======================================================
+        {/* =====================================================
             DESKTOP SIDEBAR
-        ======================================================== */}
-
+           ===================================================== */}
         <aside className="hidden min-h-[calc(100vh-4rem)] w-64 shrink-0 border-r border-gray-200 bg-white lg:block">
           <div className="sticky top-16 p-4">
             <AdminNavigation navItems={navItems} />
           </div>
         </aside>
 
-        {/* =======================================================
+        {/* =====================================================
             MOBILE SIDEBAR
-        ======================================================== */}
-
+           ===================================================== */}
         {mobileMenuOpen && (
           <div className="fixed inset-0 z-50 lg:hidden">
             {/* Overlay */}
-
             <button
               type="button"
               aria-label="Close menu"
@@ -118,7 +100,6 @@ export default function AdminLayout({ children }) {
             />
 
             {/* Drawer */}
-
             <aside className="relative h-full w-72 bg-white shadow-2xl">
               <div className="flex h-16 items-center justify-between border-b border-gray-200 px-5">
                 <div>
@@ -149,10 +130,9 @@ export default function AdminLayout({ children }) {
           </div>
         )}
 
-        {/* =======================================================
-            PAGE
-        ======================================================== */}
-
+        {/* =====================================================
+            ADMIN PAGE
+           ===================================================== */}
         <main className="min-w-0 flex-1">{children}</main>
       </div>
     </div>
