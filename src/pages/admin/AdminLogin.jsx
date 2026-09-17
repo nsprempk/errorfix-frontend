@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowRight, LockKeyhole, Mail } from "lucide-react";
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = "http://localhost:5000/api";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -40,10 +40,25 @@ export default function AdminLogin() {
       setLoading(true);
       setError("");
 
-      const response = await axios.post(`${API_URL}/auth/login`, {
+      console.log("Admin login request:", {
+        url: `${API_URL}/auth/login`,
         email,
-        password,
       });
+
+      const response = await axios.post(
+        `${API_URL}/auth/login`,
+        {
+          email,
+          password,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      console.log("Admin login response:", response.data);
 
       if (!response.data?.success) {
         setError(
@@ -55,7 +70,9 @@ export default function AdminLogin() {
       const { token, admin } = response.data;
 
       if (!token) {
-        setError("Login succeeded but no authentication token was returned.");
+        setError(
+          "Login succeeded but the server did not return an authentication token.",
+        );
         return;
       }
 
@@ -71,12 +88,25 @@ export default function AdminLogin() {
         replace: true,
       });
     } catch (error) {
-      console.error("Admin login error:", error);
+      console.error("========== ADMIN LOGIN ERROR ==========");
+      console.error("Message:", error.message);
+      console.error("Status:", error.response?.status);
+      console.error("Response:", error.response?.data);
+      console.error("URL:", error.config?.url);
+      console.error("=======================================");
 
-      setError(
-        error.response?.data?.message ||
-          "Unable to login. Please check your credentials and try again.",
-      );
+      if (error.response) {
+        setError(
+          error.response.data?.message ||
+            `Server error (${error.response.status}).`,
+        );
+      } else if (error.request) {
+        setError(
+          "The frontend could not reach the backend. Make sure the backend is running on port 5000.",
+        );
+      } else {
+        setError(error.message || "Unable to login.");
+      }
     } finally {
       setLoading(false);
     }
@@ -105,7 +135,7 @@ export default function AdminLogin() {
             className="rounded-3xl border border-gray-800 bg-gray-900 p-7 sm:p-9"
           >
             {error && (
-              <div className="mb-6 rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+              <div className="mb-6 rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm leading-6 text-red-300">
                 {error}
               </div>
             )}
@@ -131,6 +161,7 @@ export default function AdminLogin() {
                   onChange={(event) => updateField("email", event.target.value)}
                   placeholder="admin@example.com"
                   autoComplete="email"
+                  required
                   className="w-full rounded-xl border border-gray-700 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition focus:border-white"
                 />
               </div>
@@ -159,6 +190,7 @@ export default function AdminLogin() {
                   }
                   placeholder="Enter your password"
                   autoComplete="current-password"
+                  required
                   className="w-full rounded-xl border border-gray-700 bg-gray-950 py-3.5 pl-11 pr-4 text-white outline-none transition focus:border-white"
                 />
               </div>
