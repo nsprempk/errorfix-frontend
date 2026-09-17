@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { BarChart3, LayoutDashboard, LogOut, Menu, X } from "lucide-react";
+import {
+  BarChart3,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Package,
+  X,
+} from "lucide-react";
 
 export default function AdminLayout({ children }) {
   const navigate = useNavigate();
@@ -23,6 +30,11 @@ export default function AdminLayout({ children }) {
       label: "Analytics",
       path: "/admin/analytics",
       icon: BarChart3,
+    },
+    {
+      label: "Products",
+      path: "/admin/products",
+      icon: Package,
     },
   ];
 
