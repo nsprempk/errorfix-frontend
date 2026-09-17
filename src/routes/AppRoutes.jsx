@@ -38,6 +38,7 @@ import Education from "../pages/industries/Education.jsx";
 
 /* Admin */
 import AdminLogin from "../pages/admin/AdminLogin.jsx";
+import AdminProducts from "../pages/admin/AdminProducts.jsx";
 import AdminQuotation from "../pages/admin/AdminQuotation.jsx";
 import AdminDashboard from "../pages/admin/AdminDashboard.jsx";
 import AdminAnalytics from "../pages/admin/AdminAnalytics.jsx";
