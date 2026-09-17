@@ -38,10 +38,10 @@ import Education from "../pages/industries/Education.jsx";
 
 /* Admin */
 import AdminLogin from "../pages/admin/AdminLogin.jsx";
+import AdminQuotation from "../pages/admin/AdminQuotation.jsx";
 import AdminDashboard from "../pages/admin/AdminDashboard.jsx";
 import AdminAnalytics from "../pages/admin/AdminAnalytics.jsx";
 import AdminProtectedRoute from "../pages/admin/AdminProtectedRoute.jsx";
-import AdminProducts from "../pages/admin/AdminProducts.jsx";
 
 function NotFound() {
   return (
@@ -156,6 +156,10 @@ export default function AppRoutes() {
 
         <Route path="/admin/analytics" element={<AdminAnalytics />} />
         <Route path="/admin/products" element={<AdminProducts />} />
+        <Route
+          path="/admin/quotes/:id/quotation"
+          element={<AdminQuotation />}
+        />
       </Route>
     </Routes>
   );
