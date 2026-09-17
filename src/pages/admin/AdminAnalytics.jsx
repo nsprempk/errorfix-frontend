@@ -223,17 +223,19 @@ export default function AdminAnalytics() {
             </p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Header Actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Products */}
             <button
               type="button"
               onClick={() => navigate("/admin/products")}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-900 transition hover:bg-gray-50"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-950 transition hover:bg-gray-50"
             >
               <Package size={17} />
               Products
             </button>
 
+            {/* Refresh */}
             <button
               type="button"
               onClick={fetchQuotes}
@@ -246,6 +248,7 @@ export default function AdminAnalytics() {
           </div>
         </div>
 
+        {/* Error */}
         {error && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {error}
@@ -343,7 +346,7 @@ export default function AdminAnalytics() {
               )}
             </section>
 
-            {/* Services + countries */}
+            {/* Services + Countries */}
             <div className="mt-8 grid gap-8 lg:grid-cols-2">
               <AnalyticsCard
                 eyebrow="Services"
@@ -390,7 +393,7 @@ export default function AdminAnalytics() {
               </AnalyticsCard>
             </div>
 
-            {/* Industries + status */}
+            {/* Industries + Status */}
             <div className="mt-8 grid gap-8 lg:grid-cols-2">
               <AnalyticsCard
                 eyebrow="Industries"
