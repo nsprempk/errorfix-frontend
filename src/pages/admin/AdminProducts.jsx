@@ -5,7 +5,9 @@ import { useNavigate } from "react-router-dom";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+).replace(/\/$/, "");
 
 const emptyForm = {
   name: "",
@@ -19,7 +21,7 @@ const emptyForm = {
   active: true,
 };
 
-export default function AdminProducts() {
+export function AdminProducts() {
   const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
@@ -41,9 +43,11 @@ export default function AdminProducts() {
   const api = useMemo(() => {
     return axios.create({
       baseURL: API_URL,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : {},
     });
   }, [token]);
 
@@ -66,10 +70,20 @@ export default function AdminProducts() {
 
       const response = await api.get("/products");
 
-      if (response.data.success) {
-        setProducts(response.data.products || []);
+      console.log("Products API response:", response.data);
+
+      if (response.data?.success) {
+        const productList = Array.isArray(response.data.products)
+          ? response.data.products
+          : Array.isArray(response.data.data)
+            ? response.data.data
+            : [];
+
+        setProducts(productList);
       } else {
-        setError(response.data.message || "Unable to load products.");
+        setProducts([]);
+
+        setError(response.data?.message || "Unable to load products.");
       }
     } catch (error) {
       console.error("Get products error:", error);
@@ -79,7 +93,11 @@ export default function AdminProducts() {
         return;
       }
 
-      setError(error.response?.data?.message || "Unable to load products.");
+      setError(
+        error.response?.data?.message ||
+          error.message ||
+          "Unable to load products.",
+      );
     } finally {
       setLoading(false);
     }
@@ -91,7 +109,10 @@ export default function AdminProducts() {
 
   const openAddModal = () => {
     setEditingProduct(null);
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      features: [],
+    });
     setFeatureInput("");
     setError("");
     setModalOpen(true);
@@ -123,7 +144,11 @@ export default function AdminProducts() {
     setModalOpen(false);
     setEditingProduct(null);
     setFeatureInput("");
-    setForm(emptyForm);
+
+    setForm({
+      ...emptyForm,
+      features: [],
+    });
   };
 
   const handleChange = (event) => {
@@ -140,7 +165,11 @@ export default function AdminProducts() {
 
     if (!feature) return;
 
-    if (form.features.includes(feature)) {
+    const exists = form.features.some(
+      (item) => item.toLowerCase() === feature.toLowerCase(),
+    );
+
+    if (exists) {
       setFeatureInput("");
       return;
     }
@@ -180,8 +209,17 @@ export default function AdminProducts() {
       return;
     }
 
-    if (form.price === "" || Number(form.price) < 0) {
+    if (
+      form.price === "" ||
+      Number.isNaN(Number(form.price)) ||
+      Number(form.price) < 0
+    ) {
       alert("Please enter a valid price.");
+      return;
+    }
+
+    if (!form.currency.trim()) {
+      alert("Please select a currency.");
       return;
     }
 
@@ -197,7 +235,7 @@ export default function AdminProducts() {
         features: form.features,
         deliveryTime: form.deliveryTime.trim(),
         notes: form.notes.trim(),
-        active: form.active,
+        active: Boolean(form.active),
       };
 
       let response;
@@ -208,23 +246,24 @@ export default function AdminProducts() {
         response = await api.post("/products", payload);
       }
 
-      if (response.data.success) {
-        if (editingProduct) {
-          setProducts((prev) =>
-            prev.map((product) =>
-              product._id === editingProduct._id
-                ? response.data.product
-                : product,
-            ),
-          );
-        } else {
-          setProducts((prev) => [response.data.product, ...prev]);
-        }
-
-        closeModal();
-      } else {
-        alert(response.data.message || "Unable to save product.");
+      if (!response.data?.success) {
+        alert(response.data?.message || "Unable to save product.");
+        return;
       }
+
+      const savedProduct = response.data.product;
+
+      if (editingProduct) {
+        setProducts((prev) =>
+          prev.map((product) =>
+            product._id === editingProduct._id ? savedProduct : product,
+          ),
+        );
+      } else {
+        setProducts((prev) => [savedProduct, ...prev]);
+      }
+
+      closeModal();
     } catch (error) {
       console.error("Save product error:", error);
 
@@ -233,7 +272,11 @@ export default function AdminProducts() {
         return;
       }
 
-      alert(error.response?.data?.message || "Unable to save product.");
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Unable to save product.",
+      );
     } finally {
       setSaving(false);
     }
@@ -249,8 +292,10 @@ export default function AdminProducts() {
     try {
       const response = await api.delete(`/products/${product._id}`);
 
-      if (response.data.success) {
+      if (response.data?.success) {
         setProducts((prev) => prev.filter((item) => item._id !== product._id));
+      } else {
+        alert(response.data?.message || "Unable to delete product.");
       }
     } catch (error) {
       console.error("Delete product error:", error);
@@ -260,7 +305,11 @@ export default function AdminProducts() {
         return;
       }
 
-      alert(error.response?.data?.message || "Unable to delete product.");
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Unable to delete product.",
+      );
     }
   };
 
@@ -270,12 +319,14 @@ export default function AdminProducts() {
         active: !product.active,
       });
 
-      if (response.data.success) {
+      if (response.data?.success) {
         setProducts((prev) =>
           prev.map((item) =>
             item._id === product._id ? response.data.product : item,
           ),
         );
+      } else {
+        alert(response.data?.message || "Unable to update product.");
       }
     } catch (error) {
       console.error("Toggle product status error:", error);
@@ -285,7 +336,11 @@ export default function AdminProducts() {
         return;
       }
 
-      alert(error.response?.data?.message || "Unable to update product.");
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Unable to update product.",
+      );
     }
   };
 
@@ -312,10 +367,15 @@ export default function AdminProducts() {
     });
   }, [products, search, categoryFilter]);
 
+  const activeCount = products.filter((item) => item.active !== false).length;
+
+  const inactiveCount = products.length - activeCount;
+
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Header */}
+        {/* HEADER */}
+
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">
@@ -331,7 +391,7 @@ export default function AdminProducts() {
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={fetchProducts}
@@ -353,29 +413,26 @@ export default function AdminProducts() {
           </div>
         </div>
 
-        {/* Error */}
+        {/* ERROR */}
+
         {error && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
             {error}
           </div>
         )}
 
-        {/* Stats */}
+        {/* STATS */}
+
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           <MiniStat label="Total Products" value={products.length} />
 
-          <MiniStat
-            label="Active"
-            value={products.filter((item) => item.active).length}
-          />
+          <MiniStat label="Active" value={activeCount} />
 
-          <MiniStat
-            label="Inactive"
-            value={products.filter((item) => !item.active).length}
-          />
+          <MiniStat label="Inactive" value={inactiveCount} />
         </div>
 
-        {/* Filters */}
+        {/* FILTERS */}
+
         <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-4">
           <div className="flex flex-col gap-3 sm:flex-row">
             <input
@@ -402,7 +459,8 @@ export default function AdminProducts() {
           </div>
         </div>
 
-        {/* Products */}
+        {/* PRODUCTS */}
+
         <section className="mt-6 overflow-hidden rounded-3xl border border-gray-200 bg-white">
           <div className="border-b border-gray-200 px-6 py-5">
             <h2 className="text-lg font-bold">Product Catalogue</h2>
@@ -426,20 +484,28 @@ export default function AdminProducts() {
             <div className="p-16 text-center">
               <Package size={40} className="mx-auto text-gray-300" />
 
-              <p className="mt-5 font-semibold">No products found</p>
-
-              <p className="mt-2 text-sm text-gray-500">
-                Add your first product or service to get started.
+              <p className="mt-5 font-semibold">
+                {products.length === 0
+                  ? "No products available"
+                  : "No products found"}
               </p>
 
-              <button
-                type="button"
-                onClick={openAddModal}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
-              >
-                <Plus size={17} />
-                Add Product
-              </button>
+              <p className="mt-2 text-sm text-gray-500">
+                {products.length === 0
+                  ? "Add your first product or service to get started."
+                  : "Try changing your search or category filter."}
+              </p>
+
+              {products.length === 0 && (
+                <button
+                  type="button"
+                  onClick={openAddModal}
+                  className="mt-6 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
+                >
+                  <Plus size={17} />
+                  Add Product
+                </button>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
@@ -461,12 +527,12 @@ export default function AdminProducts() {
 
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                            product.active
+                            product.active !== false
                               ? "bg-green-50 text-green-700"
                               : "bg-gray-100 text-gray-500"
                           }`}
                         >
-                          {product.active ? "Active" : "Inactive"}
+                          {product.active !== false ? "Active" : "Inactive"}
                         </span>
                       </div>
 
@@ -476,18 +542,19 @@ export default function AdminProducts() {
                         </p>
                       )}
 
-                      {product.features?.length > 0 && (
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {product.features.map((feature) => (
-                            <span
-                              key={feature}
-                              className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600"
-                            >
-                              {feature}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      {Array.isArray(product.features) &&
+                        product.features.length > 0 && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {product.features.map((feature) => (
+                              <span
+                                key={feature}
+                                className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600"
+                              >
+                                {feature}
+                              </span>
+                            ))}
+                          </div>
+                        )}
 
                       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-500">
                         {product.deliveryTime && (
@@ -509,7 +576,7 @@ export default function AdminProducts() {
                           onClick={() => toggleActive(product)}
                           className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold transition hover:bg-gray-100"
                         >
-                          {product.active ? "Deactivate" : "Activate"}
+                          {product.active !== false ? "Deactivate" : "Activate"}
                         </button>
 
                         <button
@@ -539,7 +606,8 @@ export default function AdminProducts() {
         </section>
       </div>
 
-      {/* Product modal */}
+      {/* MODAL */}
+
       {modalOpen && (
         <ProductModal
           editingProduct={editingProduct}
@@ -559,15 +627,9 @@ export default function AdminProducts() {
   );
 }
 
-function MiniStat({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5">
-      <p className="text-sm font-medium text-gray-500">{label}</p>
-
-      <p className="mt-2 text-3xl font-bold">{value}</p>
-    </div>
-  );
-}
+/* ================================================================
+   MODAL
+================================================================ */
 
 function ProductModal({
   editingProduct,
@@ -586,7 +648,6 @@ function ProductModal({
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
       <div className="flex min-h-full items-center justify-center py-8">
         <div className="w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-          {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.15em] text-gray-400">
@@ -608,7 +669,6 @@ function ProductModal({
             </button>
           </div>
 
-          {/* Form */}
           <form onSubmit={onSubmit}>
             <div className="max-h-[70vh] overflow-y-auto p-6">
               <div className="grid gap-5 sm:grid-cols-2">
@@ -672,7 +732,6 @@ function ProductModal({
                 />
               </div>
 
-              {/* Description */}
               <div className="mt-5">
                 <label className="mb-2 block text-sm font-semibold">
                   Description
@@ -688,7 +747,6 @@ function ProductModal({
                 />
               </div>
 
-              {/* Features */}
               <div className="mt-5">
                 <label className="mb-2 block text-sm font-semibold">
                   Features / Included Items
@@ -737,7 +795,6 @@ function ProductModal({
                 )}
               </div>
 
-              {/* Notes */}
               <div className="mt-5">
                 <label className="mb-2 block text-sm font-semibold">
                   Notes
@@ -753,7 +810,6 @@ function ProductModal({
                 />
               </div>
 
-              {/* Active */}
               <label className="mt-5 flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 p-4">
                 <input
                   type="checkbox"
@@ -774,7 +830,6 @@ function ProductModal({
               </label>
             </div>
 
-            {/* Footer */}
             <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-5">
               <button
                 type="button"
@@ -806,6 +861,10 @@ function ProductModal({
   );
 }
 
+/* ================================================================
+   FIELD
+================================================================ */
+
 function Field({
   label,
   name,
@@ -831,6 +890,24 @@ function Field({
   );
 }
 
+/* ================================================================
+   STAT
+================================================================ */
+
+function MiniStat({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5">
+      <p className="text-sm font-medium text-gray-500">{label}</p>
+
+      <p className="mt-2 text-3xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+/* ================================================================
+   PRICE
+================================================================ */
+
 function formatPrice(price, currency = "USD") {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -842,3 +919,5 @@ function formatPrice(price, currency = "USD") {
     return `${currency} ${Number(price) || 0}`;
   }
 }
+
+export default AdminProducts;

@@ -20,7 +20,9 @@ import { useNavigate } from "react-router-dom";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api"
+).replace(/\/$/, "");
 
 const statusOptions = [
   "New",
@@ -43,9 +45,11 @@ export default function AdminDashboard() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+
   const [error, setError] = useState("");
 
   const [quoteProducts, setQuoteProducts] = useState([]);
+
   const [customNote, setCustomNote] = useState("");
   const [sendingQuote, setSendingQuote] = useState(false);
 
@@ -54,9 +58,11 @@ export default function AdminDashboard() {
   const api = useMemo(() => {
     return axios.create({
       baseURL: API_URL,
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: token
+        ? {
+            Authorization: `Bearer ${token}`,
+          }
+        : {},
     });
   }, [token]);
 
@@ -64,14 +70,14 @@ export default function AdminDashboard() {
     localStorage.removeItem("adminToken");
     localStorage.removeItem("adminUser");
 
-    navigate("/admin/login", { replace: true });
+    navigate("/admin/login", {
+      replace: true,
+    });
   }, [navigate]);
 
-  /*
-   * ============================================================
-   * FETCH ENQUIRIES
-   * ============================================================
-   */
+  /* ============================================================
+     FETCH ENQUIRIES
+  ============================================================ */
 
   const fetchQuotes = useCallback(async () => {
     if (!token) {
@@ -85,10 +91,12 @@ export default function AdminDashboard() {
 
       const response = await api.get("/quotes");
 
-      if (response.data.success) {
-        setQuotes(response.data.quotes || []);
+      if (response.data?.success) {
+        setQuotes(
+          Array.isArray(response.data.quotes) ? response.data.quotes : [],
+        );
       } else {
-        setError("Unable to load enquiries.");
+        setError(response.data?.message || "Unable to load enquiries.");
       }
     } catch (error) {
       console.error("Get quotes error:", error);
@@ -98,17 +106,19 @@ export default function AdminDashboard() {
         return;
       }
 
-      setError(error.response?.data?.message || "Unable to load enquiries.");
+      setError(
+        error.response?.data?.message ||
+          error.message ||
+          "Unable to load enquiries.",
+      );
     } finally {
       setLoading(false);
     }
   }, [api, logout, token]);
 
-  /*
-   * ============================================================
-   * FETCH PRODUCTS
-   * ============================================================
-   */
+  /* ============================================================
+     FETCH PRODUCTS
+  ============================================================ */
 
   const fetchProducts = useCallback(async () => {
     if (!token) {
@@ -121,20 +131,30 @@ export default function AdminDashboard() {
 
       const response = await api.get("/products");
 
-      if (response.data.success) {
-        setProducts(response.data.products || []);
+      console.log("Dashboard products response:", response.data);
+
+      if (response.data?.success) {
+        const productList = Array.isArray(response.data.products)
+          ? response.data.products
+          : Array.isArray(response.data.data)
+            ? response.data.data
+            : [];
+
+        setProducts(productList);
+      } else {
+        setProducts([]);
+
+        console.error(response.data?.message || "Unable to load products.");
       }
     } catch (error) {
-      console.error("Get products error:", error);
+      console.error("Dashboard get products error:", error);
 
       if (error.response?.status === 401) {
         logout();
         return;
       }
 
-      console.error(
-        error.response?.data?.message || "Unable to load products.",
-      );
+      setProducts([]);
     } finally {
       setProductsLoading(false);
     }
@@ -145,11 +165,17 @@ export default function AdminDashboard() {
     fetchProducts();
   }, [fetchQuotes, fetchProducts]);
 
-  /*
-   * ============================================================
-   * UPDATE STATUS
-   * ============================================================
-   */
+  /* ============================================================
+     ACTIVE PRODUCTS FOR QUOTATIONS
+  ============================================================ */
+
+  const availableProducts = useMemo(() => {
+    return products.filter((product) => product.active !== false);
+  }, [products]);
+
+  /* ============================================================
+     UPDATE STATUS
+  ============================================================ */
 
   const updateStatus = async (id, status) => {
     try {
@@ -157,7 +183,7 @@ export default function AdminDashboard() {
         status,
       });
 
-      if (response.data.success) {
+      if (response.data?.success) {
         setQuotes((prev) =>
           prev.map((quote) => (quote._id === id ? response.data.quote : quote)),
         );
@@ -176,11 +202,9 @@ export default function AdminDashboard() {
     }
   };
 
-  /*
-   * ============================================================
-   * DELETE ENQUIRY
-   * ============================================================
-   */
+  /* ============================================================
+     DELETE ENQUIRY
+  ============================================================ */
 
   const deleteQuote = async (id) => {
     const confirmed = window.confirm(
@@ -192,7 +216,7 @@ export default function AdminDashboard() {
     try {
       const response = await api.delete(`/quotes/${id}`);
 
-      if (response.data.success) {
+      if (response.data?.success) {
         setQuotes((prev) => prev.filter((quote) => quote._id !== id));
 
         setSelectedQuote(null);
@@ -209,25 +233,37 @@ export default function AdminDashboard() {
     }
   };
 
-  /*
-   * ============================================================
-   * OPEN ENQUIRY
-   * ============================================================
-   */
+  /* ============================================================
+     OPEN ENQUIRY
+  ============================================================ */
 
-  const openQuote = (quote) => {
+  const openQuote = async (quote) => {
     setSelectedQuote(quote);
     setQuoteProducts([]);
     setCustomNote("");
+
+    /*
+     * Refresh products when opening quotation.
+     * This means newly-created products appear immediately
+     * without requiring a full dashboard refresh.
+     */
+    await fetchProducts();
   };
 
-  /*
-   * ============================================================
-   * ADD PRODUCT TO QUOTATION
-   * ============================================================
-   */
+  /* ============================================================
+     ADD PRODUCT
+  ============================================================ */
 
   const addProduct = (product) => {
+    if (!product?._id) {
+      return;
+    }
+
+    if (product.active === false) {
+      alert("This product is inactive and cannot be added.");
+      return;
+    }
+
     const alreadyAdded = quoteProducts.some(
       (item) => item.productId === product._id,
     );
@@ -237,14 +273,27 @@ export default function AdminDashboard() {
       return;
     }
 
+    /*
+     * Keep one currency per quotation.
+     */
+    if (
+      quoteProducts.length > 0 &&
+      quoteProducts[0].currency !== (product.currency || "USD")
+    ) {
+      alert(
+        `This quotation uses ${quoteProducts[0].currency}. Please select a product with the same currency.`,
+      );
+      return;
+    }
+
     setQuoteProducts((prev) => [
       ...prev,
       {
         productId: product._id,
-        name: product.name,
-        category: product.category,
+        name: product.name || "",
+        category: product.category || "",
         description: product.description || "",
-        features: product.features || [],
+        features: Array.isArray(product.features) ? product.features : [],
         deliveryTime: product.deliveryTime || "",
         currency: product.currency || "USD",
         price: Number(product.price) || 0,
@@ -253,11 +302,9 @@ export default function AdminDashboard() {
     ]);
   };
 
-  /*
-   * ============================================================
-   * REMOVE PRODUCT
-   * ============================================================
-   */
+  /* ============================================================
+     REMOVE PRODUCT
+  ============================================================ */
 
   const removeProduct = (productId) => {
     setQuoteProducts((prev) =>
@@ -265,18 +312,20 @@ export default function AdminDashboard() {
     );
   };
 
-  /*
-   * ============================================================
-   * CHANGE QUANTITY
-   * ============================================================
-   */
+  /* ============================================================
+     QUANTITY
+  ============================================================ */
 
   const changeQuantity = (productId, change) => {
     setQuoteProducts((prev) =>
       prev.map((item) => {
-        if (item.productId !== productId) return item;
+        if (item.productId !== productId) {
+          return item;
+        }
 
-        const newQuantity = Math.max(1, Number(item.quantity) + change);
+        const currentQuantity = Number(item.quantity) || 1;
+
+        const newQuantity = Math.max(1, currentQuantity + change);
 
         return {
           ...item,
@@ -286,56 +335,54 @@ export default function AdminDashboard() {
     );
   };
 
-  /*
-   * ============================================================
-   * CHANGE PRICE
-   * ============================================================
-   */
+  /* ============================================================
+     PRICE
+  ============================================================ */
 
   const changePrice = (productId, value) => {
     setQuoteProducts((prev) =>
       prev.map((item) => {
-        if (item.productId !== productId) return item;
+        if (item.productId !== productId) {
+          return item;
+        }
 
         return {
           ...item,
-          price: Math.max(0, Number(value) || 0),
+          price: value === "" ? "" : Math.max(0, Number(value) || 0),
         };
       }),
     );
   };
 
-  /*
-   * ============================================================
-   * TOTAL
-   * ============================================================
-   */
+  /* ============================================================
+     TOTAL
+  ============================================================ */
 
   const quoteTotal = useMemo(() => {
-    return quoteProducts.reduce(
-      (total, item) =>
-        total + Number(item.price || 0) * Number(item.quantity || 1),
-      0,
-    );
+    return quoteProducts.reduce((total, item) => {
+      const price = Number(item.price) || 0;
+
+      const quantity = Number(item.quantity) || 1;
+
+      return total + price * quantity;
+    }, 0);
   }, [quoteProducts]);
 
-  /*
-   * ============================================================
-   * CURRENCY
-   * ============================================================
-   */
+  /* ============================================================
+     CURRENCY
+  ============================================================ */
 
   const quoteCurrency =
     quoteProducts.length > 0 ? quoteProducts[0].currency || "USD" : "USD";
 
-  /*
-   * ============================================================
-   * SEND QUOTATION EMAIL
-   * ============================================================
-   */
+  /* ============================================================
+     SEND QUOTATION
+  ============================================================ */
 
   const sendQuotation = async () => {
-    if (!selectedQuote) return;
+    if (!selectedQuote) {
+      return;
+    }
 
     if (!selectedQuote.email) {
       alert("This enquiry does not contain a client email.");
@@ -360,13 +407,22 @@ export default function AdminDashboard() {
         },
       );
 
-      if (response.data.success) {
+      if (response.data?.success) {
         alert(`Quotation sent successfully to ${selectedQuote.email}`);
 
-        await updateStatus(selectedQuote._id, "Contacted");
+        /*
+         * Update status after successful email.
+         */
+        try {
+          await updateStatus(selectedQuote._id, "Contacted");
+        } catch (statusError) {
+          console.error("Status update after quotation:", statusError);
+        }
 
         setQuoteProducts([]);
         setCustomNote("");
+      } else {
+        alert(response.data?.message || "Unable to send quotation.");
       }
     } catch (error) {
       console.error("Send quotation error:", error);
@@ -376,17 +432,19 @@ export default function AdminDashboard() {
         return;
       }
 
-      alert(error.response?.data?.message || "Unable to send quotation.");
+      alert(
+        error.response?.data?.message ||
+          error.message ||
+          "Unable to send quotation.",
+      );
     } finally {
       setSendingQuote(false);
     }
   };
 
-  /*
-   * ============================================================
-   * FILTER
-   * ============================================================
-   */
+  /* ============================================================
+     FILTER
+  ============================================================ */
 
   const filteredQuotes = useMemo(() => {
     const searchText = search.trim().toLowerCase();
@@ -408,11 +466,9 @@ export default function AdminDashboard() {
     });
   }, [quotes, search, statusFilter]);
 
-  /*
-   * ============================================================
-   * STATISTICS
-   * ============================================================
-   */
+  /* ============================================================
+     STATS
+  ============================================================ */
 
   const stats = useMemo(() => {
     return {
@@ -431,9 +487,7 @@ export default function AdminDashboard() {
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* ======================================================
-            HEADER
-        ======================================================= */}
+        {/* HEADER */}
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -467,9 +521,7 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* ======================================================
-            ERROR
-        ======================================================= */}
+        {/* ERROR */}
 
         {error && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
@@ -477,9 +529,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ======================================================
-            STATISTICS
-        ======================================================= */}
+        {/* STATISTICS */}
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
@@ -505,9 +555,7 @@ export default function AdminDashboard() {
           />
         </div>
 
-        {/* ======================================================
-            SEARCH
-        ======================================================= */}
+        {/* SEARCH */}
 
         <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -526,27 +574,23 @@ export default function AdminDashboard() {
               />
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium outline-none focus:border-gray-950"
-              >
-                <option value="All">All Statuses</option>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium outline-none focus:border-gray-950"
+            >
+              <option value="All">All Statuses</option>
 
-                {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {/* ======================================================
-            ENQUIRIES
-        ======================================================= */}
+        {/* ENQUIRIES */}
 
         <section className="mt-6 overflow-hidden rounded-3xl border border-gray-200 bg-white">
           <div className="border-b border-gray-200 px-6 py-5">
@@ -657,14 +701,13 @@ export default function AdminDashboard() {
         </section>
       </div>
 
-      {/* ========================================================
-          DETAIL MODAL
-      ========================================================= */}
+      {/* QUOTE MODAL */}
 
       {selectedQuote && (
         <QuoteModal
           quote={selectedQuote}
-          products={products}
+          products={availableProducts}
+          totalProducts={products.length}
           productsLoading={productsLoading}
           quoteProducts={quoteProducts}
           customNote={customNote}
@@ -711,7 +754,7 @@ function StatCard({ title, value, icon: Icon }) {
 }
 
 /* ================================================================
-   STATUS BADGE
+   STATUS
 ================================================================ */
 
 function StatusBadge({ status }) {
@@ -741,6 +784,7 @@ function StatusBadge({ status }) {
 function QuoteModal({
   quote,
   products,
+  totalProducts,
   productsLoading,
   quoteProducts,
   customNote,
@@ -761,9 +805,7 @@ function QuoteModal({
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 p-4">
       <div className="flex min-h-full items-center justify-center">
         <div className="w-full max-w-5xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-          {/* ====================================================
-              HEADER
-          ===================================================== */}
+          {/* HEADER */}
 
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
             <div className="min-w-0">
@@ -789,9 +831,7 @@ function QuoteModal({
             </button>
           </div>
 
-          {/* ====================================================
-              CONTENT
-          ===================================================== */}
+          {/* CONTENT */}
 
           <div className="max-h-[75vh] overflow-y-auto p-6">
             {/* CLIENT DETAILS */}
@@ -830,9 +870,7 @@ function QuoteModal({
 
             <TagSection title="Platforms" items={quote.platforms} />
 
-            {/* ==================================================
-                PRODUCT QUOTATION
-            =================================================== */}
+            {/* PRODUCT QUOTATION */}
 
             <div className="mt-10 border-t border-gray-200 pt-8">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -872,11 +910,15 @@ function QuoteModal({
                     <Package size={28} className="mx-auto text-gray-300" />
 
                     <p className="mt-3 text-sm font-semibold">
-                      No products available
+                      {totalProducts === 0
+                        ? "No products available"
+                        : "No active products available"}
                     </p>
 
                     <p className="mt-1 text-xs text-gray-500">
-                      Add products from the Products section first.
+                      {totalProducts === 0
+                        ? "Add products from the Products section first."
+                        : "Activate a product from the Products section first."}
                     </p>
                   </div>
                 ) : (
@@ -1044,7 +1086,8 @@ function QuoteModal({
 
                           <div className="rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white">
                             {formatMoney(
-                              Number(product.price) * Number(product.quantity),
+                              (Number(product.price) || 0) *
+                                (Number(product.quantity) || 1),
                               product.currency,
                             )}
                           </div>
@@ -1055,7 +1098,7 @@ function QuoteModal({
                 </div>
               )}
 
-              {/* CUSTOM NOTE */}
+              {/* NOTE */}
 
               <div className="mt-6">
                 <label className="mb-2 flex items-center gap-2 text-sm font-bold">
@@ -1117,9 +1160,7 @@ function QuoteModal({
               </button>
             </div>
 
-            {/* ==================================================
-                STATUS
-            =================================================== */}
+            {/* STATUS */}
 
             <div className="mt-8 border-t border-gray-200 pt-7">
               <label className="mb-3 block text-sm font-bold">
@@ -1145,9 +1186,7 @@ function QuoteModal({
             </div>
           </div>
 
-          {/* ====================================================
-              FOOTER
-          ===================================================== */}
+          {/* FOOTER */}
 
           <div className="flex justify-between border-t border-gray-200 bg-gray-50 px-6 py-5">
             <button
@@ -1192,7 +1231,7 @@ function Info({ label, value }) {
 }
 
 /* ================================================================
-   DETAIL SECTION
+   DETAIL
 ================================================================ */
 
 function DetailSection({ title, content }) {
@@ -1208,7 +1247,7 @@ function DetailSection({ title, content }) {
 }
 
 /* ================================================================
-   TAG SECTION
+   TAGS
 ================================================================ */
 
 function TagSection({ title, items = [] }) {
@@ -1217,7 +1256,7 @@ function TagSection({ title, items = [] }) {
       <h3 className="text-sm font-bold">{title}</h3>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {!items || items.length === 0 ? (
+        {!Array.isArray(items) || items.length === 0 ? (
           <span className="text-sm text-gray-500">None selected</span>
         ) : (
           items.map((item) => (
@@ -1235,7 +1274,7 @@ function TagSection({ title, items = [] }) {
 }
 
 /* ================================================================
-   FORMAT SOLUTION
+   SOLUTION
 ================================================================ */
 
 function formatSolution(solution) {
@@ -1252,7 +1291,7 @@ function formatSolution(solution) {
 }
 
 /* ================================================================
-   FORMAT MONEY
+   MONEY
 ================================================================ */
 
 function formatMoney(value, currency = "USD") {
@@ -1270,7 +1309,7 @@ function formatMoney(value, currency = "USD") {
 }
 
 /* ================================================================
-   FORMAT DATE
+   DATE
 ================================================================ */
 
 function formatDate(date) {
